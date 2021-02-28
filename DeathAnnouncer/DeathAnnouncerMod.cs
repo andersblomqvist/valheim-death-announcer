@@ -12,7 +12,7 @@ using UnityEngine;
  */
 namespace DeathAnnouncer
 {
-    [BepInPlugin("com.branders.deathannouncermod", "Death Announcer Mod", "1.0.0.0")]
+    [BepInPlugin("com.branders.deathannouncermod", "Death Announcer Mod", "1.0.0.1")]
     public class DeathAnnouncerMod : BaseUnityPlugin
     {
         // State all config values
@@ -24,13 +24,12 @@ namespace DeathAnnouncer
         public static ConfigEntry<bool> enableMapPing;
         public static ConfigEntry<Vector2> deathsTextLocation;
 
-        // GUI elements for the Deaths: # text under the minimap
-        private static Font deathFont;
-        private static GUIStyle style;
-        private static GUIStyle shadow;
         private static Vector2 deathsTextPos;
-        private static Vector2 shadowOffset;
+        private static HudText deathText;
 
+        /**
+         *  Mod init
+         */
         private void Awake()
         {
             // Init config values
@@ -42,53 +41,23 @@ namespace DeathAnnouncer
             enableMapPing = Config.Bind("General", "EnableMapPing", true, "Toggle map ping on/off");
             deathsTextLocation = Config.Bind("General", "DeathsTextLocation", new Vector2(0.88f, 0.225f), "Location of the no. of deaths text (in screen percentage!) Ignore decimals");
 
-            Harmony.CreateAndPatchAll(typeof(DeathAnnouncerMod));
-
             // Transform the config percentage values to screen pos
             deathsTextPos = new Vector2(Screen.width * deathsTextLocation.Value.x, Screen.height * deathsTextLocation.Value.y);
-            shadowOffset = new Vector2(-2, 2);
+
+            var harmony = new Harmony("com.branders.deathannouncermod");
+            harmony.PatchAll();
+            Harmony.CreateAndPatchAll(typeof(DeathAnnouncerMod));
         }
 
         /**
-         *  On startup, retrieve list of fonts and find searched font
+         *  Init GUI elements
          */
-        [HarmonyPatch(typeof(FejdStartup), "Awake")]
+        [HarmonyPatch(typeof(Hud), "Awake")]
         [HarmonyPostfix]
-        private static void GetFonts()
+        private static void SetupGui()
         {
-            // Get font list
-            Font[] fonts = Resources.FindObjectsOfTypeAll<Font>();
-
-            // Search for the font and set deathFont
-            foreach(Font font in fonts)
-            {
-                if(font.name == "AveriaSerifLibre-Bold")
-                {
-                    deathFont = font;
-                    break;
-                }
-            }
-
-            // Style for the readable text
-            style = new GUIStyle
-            {
-                richText = true,
-                fontSize = 16,
-                alignment = TextAnchor.UpperLeft,
-                font = deathFont,
-            };
-            style.normal.textColor = Color.white;
-
-            // Style for the shadow, same as above but black
-            shadow = new GUIStyle
-            {
-                richText = true,
-                fontSize = 16,
-                alignment = TextAnchor.UpperLeft,
-                font = deathFont,
-                
-            };
-            shadow.normal.textColor = Color.black;
+            // Number of deaths text under the minimap
+            deathText = new HudText(HudText.Style.Rounded, Color.white, 16);
         }
 
         /**
@@ -97,7 +66,7 @@ namespace DeathAnnouncer
          *      deaths show     show GUI text with number of deaths
          */
         [HarmonyPatch(typeof(Console), "InputText")]
-        [HarmonyPrefix]
+        [HarmonyPostfix]
         private static void ConsoleInputText()
         {
             string cmd = Console.instance.m_input.text;
@@ -121,9 +90,9 @@ namespace DeathAnnouncer
          */
         [HarmonyPatch(typeof(Player), "OnDeath")]
         [HarmonyPrefix]
-        private static void NotifyOtherPlayers(Player __instance)
+        private static void SendDeathMessage(Player __instance)
         {
-            int deaths = GetPlayerDeaths();
+            int deaths = GetPlayerDeaths() + 1;
 
             Debug.Log($"{__instance.GetPlayerName()} died: #{deaths}");
 
@@ -152,7 +121,7 @@ namespace DeathAnnouncer
                     return;
 
                 // Hide if player is either dead or in a cut scene. Example of a cut scene is when the player logs in and rises up from the
-                // ground. Other GUI are enabled when the player get to control the character.
+                // ground.
                 if (Player.m_localPlayer.IsDead() || Player.m_localPlayer.InCutscene())
                     return;
 
@@ -160,13 +129,12 @@ namespace DeathAnnouncer
                 if (!enableDeathsText.Value)
                     return;
 
-                GUI.Label(new Rect(deathsTextPos + shadowOffset, new Vector2(0, 0)), $"Deaths: {GetPlayerDeaths()}", shadow);
-                GUI.Label(new Rect(deathsTextPos, new Vector2(0, 0)), $"Deaths: {GetPlayerDeaths()}", style);
+                deathText.Render(deathsTextPos, $"Deaths: {GetPlayerDeaths()}");
             }
         }
 
         /**
-         *  Returns the number of deaths local player has
+         *  Returns the number of deaths for local player
          */
         private static int GetPlayerDeaths()
         {
