@@ -116,15 +116,6 @@ namespace DeathAnnouncer
         {
             if (Player.m_localPlayer != null)
             {
-                // Hide if player is in screen shot mode (Ctrl + F3)
-                if (Hud.IsUserHidden())
-                    return;
-
-                // Hide if player is either dead or in a cut scene. Example of a cut scene is when the player logs in and rises up from the
-                // ground.
-                if (Player.m_localPlayer.IsDead() || Player.m_localPlayer.InCutscene())
-                    return;
-
                 // Check config enable/disable
                 if (!enableDeathsText.Value)
                     return;
